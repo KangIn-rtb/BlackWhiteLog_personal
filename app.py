@@ -1,11 +1,12 @@
 # Flask 기본 기능들 import
-from flask import Flask, jsonify, render_template, request, session, url_for
+from flask import Flask, jsonify, render_template, request, session, url_for, flash, redirect
 # .env 파일에 저장한 환경변수 불러오기
 from extensions import mail
 from dotenv import load_dotenv
 # 운영체제 환경변수 접근용
 import os
 
+from routes.admin.admin_db import create_restaurant_request
 from routes.owner.owner_routes import register_owner_routes
 from routes.admin.admin_routes import admin_bp
 from routes.login.login_routes import login_bp
@@ -151,9 +152,43 @@ def api_toggle_favorite(restaurant_id):
         "is_favorite": is_favorite
     })
 
-@app.route("/seller/register")
+@app.route("/seller/register", methods=["GET", "POST"])
 def seller_register():
+    user_id = session.get("user_id")
+    if not user_id:
+        flash("로그인이 필요합니다.")
+        return redirect(url_for("login.login"))
+
+    if request.method == "GET":
+        return render_template("owner/owner_register.html")
+
+    store_name = request.form.get("store_name", "").strip()
+    owner_name = request.form.get("owner_name", "").strip()
+    phone = request.form.get("phone", "").strip()
+    address = request.form.get("address", "").strip()
+    category = request.form.get("category", "").strip()
+    description = request.form.get("description", "").strip()
+
+    if not store_name:
+        flash("가게명을 입력해주세요.")
+        return render_template("owner/owner_register.html")
+
+    success, result = create_restaurant_request(
+        owner_name=str(user_id),   # user_id를 owner_name 칸에 저장
+        store_name=store_name,
+        phone=phone,
+        road_address=address,
+        category_name=category,
+        description=description
+    )
+
+    if success:
+        flash("판매자 등록 신청이 완료되었습니다.")
+        return redirect(url_for("seller_register"))
+
+    flash(f"판매자 등록 신청에 실패했습니다: {result}")
     return render_template("owner/owner_register.html")
+
 
 
 if __name__ == "__main__":

@@ -2,6 +2,8 @@ import os
 import pymysql
 from dotenv import load_dotenv
 from datetime import datetime, timedelta
+from werkzeug.utils import secure_filename
+import uuid
 
 load_dotenv()
 
@@ -166,3 +168,90 @@ def get_visit_chart_by_restaurant(restaurant_id):
         })
 
     return chart_list
+
+def allowed_file(filename):
+    if "." not in filename:
+        return False
+
+    ext = filename.rsplit(".", 1)[1].lower()
+    return ext in {"jpg", "jpeg", "png", "gif", "webp"}
+
+
+def get_store_image_url_by_restaurant(restaurant_id):
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            sql = """
+                SELECT image_url
+                FROM restaurant_images
+                WHERE restaurant_id = %s
+                    AND menu_id IS NULL
+                ORDER BY sort_order ASC, image_id DESC
+                LIMIT 1
+            """
+            cursor.execute(sql, (restaurant_id,))
+            row = cursor.fetchone()
+            return row["image_url"] if row and row.get("image_url") else None
+    finally:
+        conn.close()
+
+def save_store_image(restaurant_id, image_file):
+    if not image_file or not image_file.filename:
+        raise ValueError("이미지 파일이 없습니다.")
+
+    if not allowed_file(image_file.filename):
+        raise ValueError("허용 확장자: jpg, jpeg, png, gif, webp")
+
+    upload_dir = os.path.join("static", "uploads", "restaurant")
+    os.makedirs(upload_dir, exist_ok=True)
+
+    original_name = secure_filename(image_file.filename)
+    ext = original_name.rsplit(".", 1)[1].lower()
+    stored_name = f"{uuid.uuid4().hex}.{ext}"
+
+    save_path = os.path.join(upload_dir, stored_name)
+    image_file.save(save_path)
+
+    image_url = f"/static/uploads/restaurant/{stored_name}"
+
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute("""
+                SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_sort
+                FROM restaurant_images
+                WHERE restaurant_id = %s
+            """, (restaurant_id,))
+            row = cursor.fetchone()
+            next_sort_order = int(row["next_sort"]) if row and row["next_sort"] is not None else 1
+
+            cursor.execute("""
+                INSERT INTO restaurant_images (
+                    restaurant_id,
+                    image_url,
+                    thumb_url,
+                    original_name,
+                    stored_name,
+                    sort_order,
+                    created_at,
+                    menu_id
+                )
+                VALUES (%s, %s, %s, %s, %s, %s, NOW(), NULL)
+            """, (
+                restaurant_id,
+                image_url,
+                image_url,
+                original_name,
+                stored_name,
+                next_sort_order
+            ))
+
+        conn.commit()
+        return image_url
+
+    except Exception:
+        conn.rollback()
+        raise
+
+    finally:
+        conn.close()

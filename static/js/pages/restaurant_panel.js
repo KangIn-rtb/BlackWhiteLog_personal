@@ -246,35 +246,16 @@ async function openDetailPanel(restaurantId, targetTab) {
                     const hasEaten = Boolean(m.has_eaten);
                     const eatenCount = Number(m.eaten_count || 0);
 
+                    // 🌟 [추가] 메뉴 이미지 HTML 생성 (사진이 있으면 태그 생성, 없으면 빈칸)
+                    const menuImgHtml = m.image_url 
+                        ? `<img src="${m.image_url}" alt="${m.menu_name}" style="width: 64px; height: 64px; object-fit: cover; border-radius: 8px; flex-shrink: 0; border: 1px solid var(--line);">` 
+                        : '';
+
                     const stampHtml = hasEaten
                         ? `
-                            <span style="
-                                display: inline-flex;
-                                align-items: center;
-                                gap: 0px;
-                                margin-left: 8px;
-                            ">
-                                <img
-                                    src="/static/img/stamp.png"
-                                    alt="먹어본 메뉴"
-                                    style="
-                                        width: 22px;
-                                        height: 22px;
-                                        object-fit: contain;
-                                        vertical-align: middle;
-                                    "
-                                >
-                                <span style="
-                                    display: inline-block;
-                                    min-width: 22px;
-                                    padding: 2px 6px;
-                                    border-radius: 999px;
-                                    background: #fff4f4;
-                                    color: #b22222;
-                                    font-size: 12px;
-                                    font-weight: 700;
-                                    line-height: 1.4;
-                                ">
+                            <span style="display: inline-flex; align-items: center; gap: 0px; margin-left: 8px;">
+                                <img src="/static/img/stamp.png" alt="먹어본 메뉴" style="width: 22px; height: 22px; object-fit: contain; vertical-align: middle;">
+                                <span style="display: inline-block; min-width: 22px; padding: 2px 6px; border-radius: 999px; background: #fff4f4; color: #b22222; font-size: 12px; font-weight: 700; line-height: 1.4;">
                                     ${eatenCount}회
                                 </span>
                             </span>
@@ -282,34 +263,16 @@ async function openDetailPanel(restaurantId, targetTab) {
                         : '';
 
                     menuHtml += `
-                        <li style="
-                            display: flex;
-                            justify-content: space-between;
-                            align-items: center;
-                            padding: 16px 0;
-                            border-bottom: 1px solid var(--line);
-                            gap: 12px;
-                        ">
-                            <div style="
-                                display: flex;
-                                align-items: center;
-                                min-width: 0;
-                                flex: 1;
-                            ">
-                                <span style="
-                                    font-weight: bold;
-                                    color: var(--text);
-                                    word-break: keep-all;
-                                ">${m.menu_name}</span>
+                        <li style="display: flex; justify-content: space-between; align-items: center; padding: 16px 0; border-bottom: 1px solid var(--line); gap: 12px;">
+                            
+                            ${menuImgHtml}
+                            
+                            <div style="display: flex; align-items: center; min-width: 0; flex: 1;">
+                                <span style="font-weight: bold; color: var(--text); word-break: keep-all;">${m.menu_name}</span>
                                 ${stampHtml}
                             </div>
 
-                            <span style="
-                                color: var(--point-dark);
-                                font-weight: bold;
-                                white-space: nowrap;
-                                flex-shrink: 0;
-                            ">${priceFormatted}</span>
+                            <span style="color: var(--point-dark); font-weight: bold; white-space: nowrap; flex-shrink: 0;">${priceFormatted}</span>
                         </li>
                     `;
                 });

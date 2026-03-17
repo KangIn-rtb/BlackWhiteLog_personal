@@ -76,7 +76,16 @@ def get_restaurant_menus(restaurant_id, user_id=None):
             CASE
                 WHEN uvm.menu_id IS NULL THEN 0
                 ELSE 1
-            END AS has_eaten
+            END AS has_eaten,
+            (
+                SELECT COALESCE(thumb_url, image_url)
+                FROM restaurant_images ri
+                WHERE ri.restaurant_id = rm.restaurant_id
+                  AND ri.menu_id = rm.menu_id
+                ORDER BY sort_order ASC, image_id ASC
+                LIMIT 1
+            ) AS image_url
+            
         FROM restaurant_menus rm
         LEFT JOIN (
             SELECT
@@ -105,6 +114,9 @@ def get_restaurant_menus(restaurant_id, user_id=None):
                 row["eaten_count"] = int(row.get("eaten_count") or 0)
                 row["has_eaten"] = bool(row.get("has_eaten", 0))
 
+                img_url = row.get("image_url")
+                if img_url and not img_url.startswith('/'):
+                    row["image_url"] = f"/static/{img_url}"
             return rows
     finally:
         conn.close()

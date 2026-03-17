@@ -5,6 +5,7 @@ from PIL import Image
 from dotenv import load_dotenv
 
 
+
 load_dotenv()
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
@@ -615,3 +616,158 @@ def delete_menu(restaurant_id, menu_id):
         raise
     finally:
         conn.close()
+
+#------------------------------------------------------------------------------------
+# 레스토랑 요청 테이블 관리 함수 - owner_register.html
+#------------------------------------------------------------------------------------
+
+# 이종민 레스토랑 요청 테이블 관리 함수 S
+def insert_pending_restaurant(store_name, owner_name, phone, road_address, category_name, description):
+    owner = get_owner_info()
+
+    owner_name = owner["owner_name"] if owner else "UNKNOWN"
+
+    sql = """
+        INSERT INTO restaurants_request
+        (
+            store_name,
+            owner_name,            
+            phone,
+            road_address,
+            category_name,
+            description
+        )
+        VALUES
+        (%s, %s, %s, %s, %s, %s)
+    """
+
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(sql, (
+                owner_name,
+                store_name,
+                phone,
+                road_address,
+                category_name,
+                description
+            ))
+        conn.commit()
+    finally:
+        conn.close()
+# 이종민 레스토랑 요청 테이블 관리 함수 E
+        
+# 이종민 레스토랑 요청 테이블 관리 함수 S
+def fetch_pending_restaurants():
+
+    sql = """
+        SELECT
+            request_id,
+            owner_name,
+            store_name,
+            phone,
+            road_address,
+            category_name,
+            description,
+            status,
+            created_at
+        FROM restaurants_request
+        WHERE status = 'PENDING'
+        ORDER BY created_at ASC
+    """
+
+    conn = get_connection()
+
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(sql)
+            return cursor.fetchall()
+
+    finally:
+        conn.close()
+# 이종민 레스토랑 요청 테이블 관리 함수 E
+
+
+# 이종민 추가된 함수 레스토랑 요청 관리  S
+def approve_restaurant(request_id):
+
+    conn = get_connection()
+
+    try:
+        with conn.cursor() as cursor:
+
+            # 요청 정보 가져오기
+            sql = """
+                SELECT *
+                FROM restaurants_request
+                WHERE request_id = %s
+            """
+            cursor.execute(sql, (request_id,))
+            request_data = cursor.fetchone()
+
+            if not request_data:
+                return
+
+            category_id = get_category_id_by_name(request_data["category_name"])
+
+            if category_id is None:
+                category_id = 1
+
+            # restaurants 테이블에 등록
+            sql = """
+                INSERT INTO restaurants
+                (
+                    restaurant_category_id,
+                    name,
+                    address,
+                    road_address,
+                    latitude,
+                    longitude,
+                    phone,
+                    business_hours,
+                    description,
+                    owner_id,
+                    status
+                )
+                VALUES (%s,%s,%s,%s,37.5665,126.9780,%s,NULL,%s,%s,'OPEN')
+            """
+
+            cursor.execute(sql, (
+                category_id,
+                request_data["store_name"],
+                request_data["road_address"],
+                request_data["road_address"],
+                request_data["phone"],
+                request_data["description"],
+                request_data["owner_id"]
+            ))
+
+            # 요청 상태 변경
+            sql = """
+                UPDATE restaurants_request
+                SET status='APPROVED'
+                WHERE request_id=%s
+            """
+
+            cursor.execute(sql, (request_id,))
+
+        conn.commit()
+
+    finally:
+        conn.close()
+
+def reject_restaurant(restaurant_id):
+    sql = """
+        UPDATE restaurants
+        SET status = 'REJECTED'
+        WHERE restaurant_id = %s
+    """
+
+    conn = get_connection()
+    try:
+        with conn.cursor() as cursor:
+            cursor.execute(sql, (restaurant_id,))
+    finally:
+        conn.close()
+
+# 이종민 추가된 함수 레스토랑 요청 관리  E

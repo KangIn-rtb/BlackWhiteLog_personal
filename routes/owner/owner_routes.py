@@ -1,4 +1,4 @@
-from flask import render_template, request, jsonify, session, redirect, url_for
+from flask import render_template, request, jsonify, session, redirect, url_for, flash
 import routes.owner.owner_menu_db as owner_db
 import routes.owner.owner_notices_db as owner_notice_db
 import routes.owner.owner_board_db as owner_board_db
@@ -7,6 +7,23 @@ import math
 
 
 def register_owner_routes(app):
+
+    def require_owner_approved():
+        user_id = session.get("user_id")
+
+        if not user_id:
+            flash("로그인이 필요합니다.")
+            return None, redirect(url_for("login.login"))
+
+        if owner_db.has_approved_restaurant(user_id):
+            return user_id, None
+
+        if owner_db.has_pending_restaurant(user_id):
+            flash("현재 판매자 승인 대기 중입니다.")
+        else:
+            flash("판매자 승인 후 이용할 수 있습니다.")
+
+        return None, redirect(url_for("seller_register"))
     # -------------------------------------------------------------------------------------
     # 오너 보드 페이지
     # -------------------------------------------------------------------------------------
@@ -20,6 +37,19 @@ def register_owner_routes(app):
         session_user_id = session.get("user_id")
         session_owner_id = session.get("owner_id")
 
+        
+        #'''  승인 받으면 owner_board 화면이동 '''
+        #owner_id, redirect_response = require_owner_approved()
+        #if redirect_response:
+        #    return redirect_response
+
+        #total_menu_count = owner_db.get_menu_count_by_owner(owner_id)
+
+        #return render_template(
+        #    "owner/owner_board.html",
+        #    total_menu_count=total_menu_count
+        #)
+
         # -------------------------------------------------------------------------
         # 판매자 세션이 없으면 보드 진입 불가
         # - 일반 사용자이거나
@@ -27,12 +57,10 @@ def register_owner_routes(app):
         # -------------------------------------------------------------------------
         if not session_user_id or not session_owner_id:
             return redirect(url_for("index"))
-
+        restaurant_menu_list = owner_db.get_menu_count_by_owner(session_owner_id)
         # -------------------------------------------------------------------------
         # 현재 로그인한 owner_id 기준으로 메뉴 수 요약 조회
         # -------------------------------------------------------------------------
-        restaurant_menu_list = owner_db.get_menu_count_by_owner(session_owner_id)
-
         try:
             # ---------------------------------------------------------------------
             # 현재 로그인한 owner_id 기준으로 가게 목록 조회
@@ -51,19 +79,25 @@ def register_owner_routes(app):
                 db_sidebar_restaurant_list = []
 
             # ---------------------------------------------------------------------
-            # 공지 / 리뷰 카드 기본값
+            # 공지 / 리뷰 / 방문자 차트 기본값
             # ---------------------------------------------------------------------
             sidebar_notice_current = None
             db_sidebar_notice_history_list = []
+            sidebar_store_image_url = None
             board_review_data = {
                 "march_review_count": 0,
                 "review_list": []
             }
+            visit_chart_data = []
+
 
             # ---------------------------------------------------------------------
             # 가게가 존재할 때만 공지 / 리뷰 데이터 조회
             # ---------------------------------------------------------------------
             if sidebar_selected_restaurant_id:
+                sidebar_store_image_url = owner_board_db.get_store_image_url_by_restaurant(
+                    sidebar_selected_restaurant_id
+                )
                 db_current_notice = owner_board_db.get_sidebar_current_notice_by_restaurant(
                     sidebar_selected_restaurant_id
                 )
@@ -95,7 +129,16 @@ def register_owner_routes(app):
                     sidebar_selected_restaurant_id,
                     limit=3
                 )
+                # -----------------------------------------------------------------
+                # 방문자 수 차트 데이터 조회
+                # - 최근 10일
+                # - 하루가 지나면 자동으로 1칸씩 밀리는 구조
+                # -----------------------------------------------------------------
+                visit_chart_data = owner_board_db.get_visit_chart_by_restaurant(
+                    sidebar_selected_restaurant_id
+                )
 
+                
         except Exception as error:
             print("owner_board error =", error)
 
@@ -103,12 +146,13 @@ def register_owner_routes(app):
             sidebar_selected_restaurant_id = None
             sidebar_selected_restaurant_name = ""
             sidebar_notice_current = None
+            sidebar_store_image_url = None
             db_sidebar_notice_history_list = []
             board_review_data = {
                 "march_review_count": 0,
                 "review_list": []
             }
-
+            visit_chart_data = []
         return render_template(
             "owner/owner_board.html",
             restaurant_menu_list=restaurant_menu_list,
@@ -119,7 +163,9 @@ def register_owner_routes(app):
             sidebar_selected_restaurant_name=sidebar_selected_restaurant_name,
             sidebar_notice_current=sidebar_notice_current,
             sidebar_notice_history_list=db_sidebar_notice_history_list,
-            board_review_data=board_review_data
+            board_review_data=board_review_data,
+            visit_chart_data=visit_chart_data,
+            sidebar_store_image_url=sidebar_store_image_url
         )
 
     # -------------------------------------------------------------------------
@@ -182,6 +228,60 @@ def register_owner_routes(app):
                 "history_notice_list": history_notice_list
             })
 
+        except Exception as error:
+            return jsonify({
+                "success": False,
+                "message": str(error)
+            }), 500
+        
+    @app.route("/owner/board/api/store_image/upload", methods=["POST"], endpoint="owner_board_api_store_image_upload")
+    def owner_board_api_store_image_upload():
+        session_owner_id = session.get("owner_id")
+
+        if not session_owner_id:
+            return jsonify({
+                "success": False,
+                "message": "로그인이 필요합니다."
+            }), 401
+
+        client_restaurant_id = request.form.get("restaurant_id", type=int)
+        store_image = request.files.get("store_image")
+
+        if not client_restaurant_id:
+            return jsonify({
+                "success": False,
+                "message": "가게 정보가 올바르지 않습니다."
+            }), 400
+
+        if not store_image or not store_image.filename:
+            return jsonify({
+                "success": False,
+                "message": "업로드할 이미지를 선택해주세요."
+            }), 400
+
+        if not owner_db.allowed_file(store_image.filename):
+            return jsonify({
+                "success": False,
+                "message": "허용 확장자: jpg, jpeg, png, gif, webp"
+            }), 400
+
+        try:
+            selected_restaurant_id, _ = get_selected_restaurant_id(
+                session_owner_id,
+                client_restaurant_id
+            )
+
+            image_url = owner_board_db.save_store_image(
+                restaurant_id=selected_restaurant_id,
+                image_file=store_image
+            )
+
+            return jsonify({
+                "success": True,
+                "message": "가게 사진이 등록되었습니다.",
+                "restaurant_id": selected_restaurant_id,
+                "image_url": image_url
+            })
         except Exception as error:
             return jsonify({
                 "success": False,

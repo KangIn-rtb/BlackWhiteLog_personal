@@ -1,19 +1,6 @@
-# Flask 기능 import
 from flask import Blueprint, render_template, request, redirect, url_for, flash, session
-
-# 데코레이터 함수 감싸기용
 from functools import wraps
 
-# 음식점 관리용 더미 데이터 import
-from .admin_dummy_data import (
-    DUMMY_CATEGORIES,
-    DUMMY_RESTAURANTS,
-    get_category_name,
-    get_restaurant_by_id,
-    get_next_restaurant_id,
-)
-
-# DB 함수 import
 from .admin_db import (
     fetch_all_users,
     admin_deactivate_user,
@@ -30,10 +17,16 @@ from .admin_db import (
     hide_admin_review,
     soft_delete_admin_review,
     restore_admin_review,
+    get_restaurant_by_id,
+    update_restaurant,
+    delete_restaurant,
+    create_restaurant,
+    fetch_admin_restaurant_requests,
+    approve_restaurant_request,
+    reject_restaurant_request,
+    fetch_admin_owners,
 )
 
-# 관리자 블루프린트 생성
-# url_for 쓸 때 admin.붙음
 admin_bp = Blueprint("admin", __name__)
 
 
@@ -58,39 +51,6 @@ def admin_required(view_func):
 
 
 # =========================
-# 관리자 음식점 목록
-# =========================
-@admin_bp.route("/admin/restaurants")
-@admin_required
-def admin_restaurants():
-    # 검색어 받기
-    keyword = request.args.get("keyword", "").strip()
-
-    # 기본은 전체 목록
-    filtered_restaurants = DUMMY_RESTAURANTS
-
-    # 검색어가 있으면 이름 기준 검색
-    if keyword:
-        filtered_restaurants = [
-            r for r in DUMMY_RESTAURANTS
-            if keyword.lower() in r["restaurant_name"].lower()
-        ]
-
-    # 카테고리명 붙여서 템플릿에 전달
-    restaurants_with_category = []
-    for r in filtered_restaurants:
-        item = r.copy()
-        item["restaurant_category_name"] = get_category_name(r["restaurant_category_id"])
-        restaurants_with_category.append(item)
-
-    return render_template(
-        "admin/admin_restaurants.html",
-        restaurants=restaurants_with_category,
-        keyword=keyword,
-    )
-
-
-# =========================
 # 관리자 음식점 등록
 # =========================
 @admin_bp.route("/admin/restaurants/create", methods=["GET", "POST"])
@@ -101,7 +61,6 @@ def admin_restaurant_create():
         return render_template(
             "admin/admin_restaurant_form.html",
             mode="create",
-            categories=DUMMY_CATEGORIES,
             restaurant=None,
         )
 
@@ -118,22 +77,16 @@ def admin_restaurant_create():
         return render_template(
             "admin/admin_restaurant_form.html",
             mode="create",
-            categories=DUMMY_CATEGORIES,
             restaurant=None,
         )
 
-    # 새 음식점 더미 데이터 생성
-    new_restaurant = {
-        "restaurant_id": get_next_restaurant_id(),
-        "restaurant_name": restaurant_name,
-        "restaurant_category_id": int(restaurant_category_id) if restaurant_category_id else 1,
-        "region_sigungu": region_sigungu,
-        "address": address,
-        "phone": phone,
-    }
-
-    # 더미 목록에 추가
-    DUMMY_RESTAURANTS.append(new_restaurant)
+    create_restaurant(
+        restaurant_name,
+        restaurant_category_id,
+        region_sigungu,
+        address,
+        phone
+    )
 
     flash("음식점이 등록되었습니다.")
     return redirect(url_for("admin.admin_restaurants"))
@@ -158,7 +111,6 @@ def admin_restaurant_edit(restaurant_id):
         return render_template(
             "admin/admin_restaurant_form.html",
             mode="edit",
-            categories=DUMMY_CATEGORIES,
             restaurant=restaurant,
         )
 
@@ -175,40 +127,52 @@ def admin_restaurant_edit(restaurant_id):
         return render_template(
             "admin/admin_restaurant_form.html",
             mode="edit",
-            categories=DUMMY_CATEGORIES,
             restaurant=restaurant,
         )
 
-    # 더미 데이터 수정
-    restaurant["restaurant_name"] = restaurant_name
-    restaurant["restaurant_category_id"] = int(restaurant_category_id) if restaurant_category_id else 1
-    restaurant["region_sigungu"] = region_sigungu
-    restaurant["address"] = address
-    restaurant["phone"] = phone
+    update_restaurant(
+        restaurant_id,
+        restaurant_name,
+        address,
+        phone
+    )
 
     flash("음식점 정보가 수정되었습니다.")
     return redirect(url_for("admin.admin_restaurants"))
 
 
 # =========================
-# 관리자 음식점 삭제
+# 관리자 음식점 삭제  이종민 수정 s
 # =========================
+
+@admin_bp.route("/admin/restaurants")
+@admin_required
+def admin_restaurants():
+    keyword = request.args.get("keyword", "").strip()
+    status = request.args.get("status", "").strip()
+
+    items = fetch_admin_restaurant_requests(keyword=keyword, status=status)
+
+    return render_template(
+        "admin/admin_seller_requests.html",
+        items=items,
+        keyword=keyword,
+        status=status,
+    )
+
+
+
+
 @admin_bp.route("/admin/restaurants/<int:restaurant_id>/delete", methods=["POST"])
 @admin_required
 def admin_restaurant_delete(restaurant_id):
-    # 삭제할 음식점 찾기
-    target = get_restaurant_by_id(restaurant_id)
 
-    # 없으면 에러 메시지
-    if not target:
-        flash("삭제할 음식점을 찾지 못했습니다.")
-        return redirect(url_for("admin.admin_restaurants"))
-
-    # 더미 목록에서 제거
-    DUMMY_RESTAURANTS.remove(target)
+    delete_restaurant(restaurant_id)
 
     flash("음식점이 삭제되었습니다.")
+
     return redirect(url_for("admin.admin_restaurants"))
+
 
 
 # =========================
@@ -523,3 +487,66 @@ def admin_release_sanction(sanction_id):
     else:
         flash("제재 내역을 찾을 수 없습니다.")
     return redirect(url_for("admin.admin_moderation"))
+
+# =========================
+# 관리자 판매자 신청 목록
+# - restaurants_request 기준
+# - user_id, restaurant_id 같이 화면에 전달
+# =========================
+# =========================
+# 관리자 판매자 신청 목록
+# - restaurants_request 기준
+# =========================
+@admin_bp.route("/admin/seller-requests", methods=["GET"])
+@admin_required
+def admin_seller_requests():
+    keyword = request.args.get("keyword", "").strip()
+    status = request.args.get("status", "PENDING").strip()
+
+    items = fetch_admin_restaurant_requests(keyword=keyword, status=status)
+
+    return render_template(
+        "admin/admin_seller_requests.html",
+        items=items,
+        keyword=keyword,
+        status=status,
+    )
+
+# =========================
+# 관리자 판매자 신청 승인
+# - request_id 기준으로 승인
+# =========================
+
+@admin_bp.route("/admin/seller-requests/<int:request_id>/approve", methods=["POST"])
+@admin_required
+def approve_seller_request(request_id):
+    success, message = approve_restaurant_request(request_id)
+    flash(message)
+    return redirect(url_for("admin.admin_seller_requests"))
+
+# =========================
+# 관리자 판매자 신청 반려
+# - request_id 기준으로 반려
+# =========================
+@admin_bp.route("/admin/seller-requests/<int:request_id>/reject", methods=["POST"])
+@admin_required
+def reject_seller_request(request_id):
+    success, message = reject_restaurant_request(request_id)
+    flash(message)
+    return redirect(url_for("admin.admin_seller_requests"))
+
+
+# =========================
+# 관리자 오너 목록
+# =========================
+@admin_bp.route("/admin/owners", methods=["GET"])
+@admin_required
+def admin_owners():
+    keyword = request.args.get("keyword", "").strip()
+    owners = fetch_admin_owners(keyword=keyword)
+
+    return render_template(
+        "admin/admin_owners.html",
+        owners=owners,
+        keyword=keyword,
+    )
