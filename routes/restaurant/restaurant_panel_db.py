@@ -15,6 +15,7 @@ def get_restaurant_detail(restaurant_id, user_id=None):
                 SELECT image_url
                 FROM restaurant_images
                 WHERE restaurant_id = r.restaurant_id
+                AND menu_id IS NULL
                 ORDER BY sort_order ASC
                 LIMIT 1
             ) AS image_url
@@ -212,7 +213,7 @@ def delete_review_transaction(review_id, user_id):
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
-            # 1. 소유권 확인 및 visit_id 추출
+            # 소유권 확인 및 visit_id 추출
             check_sql = """
                 SELECT v.visit_id FROM reviews r 
                 JOIN visits v ON r.visit_id = v.visit_id 
@@ -224,7 +225,7 @@ def delete_review_transaction(review_id, user_id):
 
             visit_id = res['visit_id']
 
-            # 2. 삭제할 이미지 경로 미리 조회 (DB 지우기 전에 백업)
+            # 삭제할 이미지 경로 미리 조회 (DB 지우기 전에 백업)
             cursor.execute("SELECT image_url FROM review_images WHERE review_id = %s", (review_id,))
             image_rows = cursor.fetchall()
             image_paths_to_delete = []
@@ -260,7 +261,7 @@ def delete_review_transaction(review_id, user_id):
                     try:
                         os.remove(file_path)
                     except Exception as file_e:
-                        print(f"⚠️ 파일 삭제 권한 없음/실패: {file_path} - {file_e}")
+                        print(f" 파일 삭제 권한 없음/실패: {file_path} - {file_e}")
             
             return True
     except Exception as e:

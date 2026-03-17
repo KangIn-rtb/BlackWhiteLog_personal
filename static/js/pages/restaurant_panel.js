@@ -246,7 +246,7 @@ async function openDetailPanel(restaurantId, targetTab) {
                     const hasEaten = Boolean(m.has_eaten);
                     const eatenCount = Number(m.eaten_count || 0);
 
-                    // 🌟 [추가] 메뉴 이미지 HTML 생성 (사진이 있으면 태그 생성, 없으면 빈칸)
+                    // 메뉴 이미지 HTML 생성 (사진이 있으면 태그 생성, 없으면 빈칸)
                     const menuImgHtml = m.image_url 
                         ? `<img src="${m.image_url}" alt="${m.menu_name}" style="width: 64px; height: 64px; object-fit: cover; border-radius: 8px; flex-shrink: 0; border: 1px solid var(--line);">` 
                         : '';
@@ -286,7 +286,7 @@ async function openDetailPanel(restaurantId, targetTab) {
         }
 
         // 리뷰(댓글) 데이터 렌더링
-        // 회원님이 만들어두신 'reviewListContainer'를 정확히 타겟팅합니다.
+        // 'reviewListContainer'를 정확히 타겟팅
         const reviewContainer = document.getElementById("reviewListContainer");
         reviewContainer.innerHTML = "<p style='padding: 20px 0; text-align: center;'>리뷰를 불러오는 중...</p>";
         

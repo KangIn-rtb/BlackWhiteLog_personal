@@ -122,6 +122,7 @@ def fetch_restaurants(region=None, keyword=None, category_id=None, user_id=None,
                 SELECT COALESCE(ri.thumb_url, ri.image_url)
                 FROM restaurant_images ri
                 WHERE ri.restaurant_id = r.restaurant_id
+                AND ri.menu_id IS NULL
                 ORDER BY ri.sort_order ASC, ri.image_id ASC
                 LIMIT 1
             ) AS image_url

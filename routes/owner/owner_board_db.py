@@ -205,7 +205,7 @@ def save_store_image(restaurant_id, image_file):
     upload_dir = os.path.join("static", "uploads", "restaurant")
     os.makedirs(upload_dir, exist_ok=True)
 
-    original_name = secure_filename(image_file.filename)
+    original_name = secure_filename(image_file.filename or "").strip()
     ext = original_name.rsplit(".", 1)[1].lower()
     stored_name = f"{uuid.uuid4().hex}.{ext}"
 
@@ -217,14 +217,13 @@ def save_store_image(restaurant_id, image_file):
     conn = get_connection()
     try:
         with conn.cursor() as cursor:
+            #기존 데이터 지우기
             cursor.execute("""
-                SELECT COALESCE(MAX(sort_order), 0) + 1 AS next_sort
-                FROM restaurant_images
-                WHERE restaurant_id = %s
+                DELETE FROM restaurant_images 
+                WHERE restaurant_id = %s AND menu_id IS NULL
             """, (restaurant_id,))
-            row = cursor.fetchone()
-            next_sort_order = int(row["next_sort"]) if row and row["next_sort"] is not None else 1
 
+            # 새 사진을 무조건 1순위(1)로 넣기!
             cursor.execute("""
                 INSERT INTO restaurant_images (
                     restaurant_id,
@@ -236,14 +235,13 @@ def save_store_image(restaurant_id, image_file):
                     created_at,
                     menu_id
                 )
-                VALUES (%s, %s, %s, %s, %s, %s, NOW(), NULL)
+                VALUES (%s, %s, %s, %s, %s, 1, NOW(), NULL)
             """, (
                 restaurant_id,
                 image_url,
                 image_url,
                 original_name,
-                stored_name,
-                next_sort_order
+                stored_name
             ))
 
         conn.commit()
